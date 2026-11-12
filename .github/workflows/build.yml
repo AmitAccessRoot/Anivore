@@ -1,0 +1,56 @@
+name: Build Anivore APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Create Android project
+        run: |
+          cp lib/main.dart /tmp/main.dart
+          cp pubspec.yaml /tmp/pubspec.yaml
+          flutter create . --org com.anivore --project-name com --platforms android
+          cp /tmp/main.dart lib/main.dart
+          cp /tmp/pubspec.yaml pubspec.yaml
+          rm -rf test
+          sed -i 's/android:label="[^"]*"/android:label="Anivore"/' android/app/src/main/AndroidManifest.xml
+
+      - name: Packages
+        run: flutter pub get
+
+      # --obfuscate: Dart code ke naam badal deta hai, decompile karna mushkil.
+      # Release build mein R8 shrink/minify Flutter default se chalta hai (Java/Kotlin code).
+      - name: Build APK
+        run: flutter build apk --release --obfuscate --split-debug-info=build/symbols
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Anivore-APK
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload symbols
+        uses: actions/upload-artifact@v4
+        with:
+          name: Anivore-Symbols
+          path: build/symbols
