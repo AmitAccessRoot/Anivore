@@ -38,8 +38,8 @@ jobs:
       - name: Packages
         run: flutter pub get
 
-      # --obfuscate: Dart code ke naam badal deta hai, decompile karna mushkil.
-      # Release build mein R8 shrink/minify Flutter default se chalta hai (Java/Kotlin code).
+      # --obfuscate: Dart कोड के नाम बदल देता है, जिससे डिकंपाइल करना बहुत कठिन हो जाता है।
+      # रिलीज़ बिल्ड में R8 (Java/Kotlin कोड का shrink और obfuscate) Flutter डिफ़ॉल्ट रूप से चलाता है।
       - name: Build APK
         run: flutter build apk --release --obfuscate --split-debug-info=build/symbols
 
