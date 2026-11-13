@@ -12,6 +12,3 @@ dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/texts.json
-    - assets/json/
