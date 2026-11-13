@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,55 +15,64 @@ void main() {
   }, (Object error, StackTrace stack) {});
 }
 
-class Topic {
-  const Topic(this.title, this.subtitle, this.file);
+const int kSize = 4;
 
-  final String title;
-  final String subtitle;
-  final String file;
+enum Dir { left, right, up, down }
+
+class LineResult {
+  const LineResult(this.values, this.merged, this.gained);
+
+  final List<int> values;
+  final List<bool> merged;
+  final int gained;
 }
 
-class Line {
-  const Line(this.heading, this.text);
-
-  final bool heading;
-  final String text;
-}
-
-Future<List<Topic>> loadTopics() async {
-  try {
-    final String raw = await rootBundle.loadString('assets/texts.json');
-    final Map<String, dynamic> map = jsonDecode(raw) as Map<String, dynamic>;
-    return ((map['topics'] ?? <dynamic>[]) as List).map((dynamic e) {
-      final Map<String, dynamic> m = e as Map<String, dynamic>;
-      return Topic(
-        (m['title'] ?? '').toString(),
-        (m['subtitle'] ?? '').toString(),
-        (m['file'] ?? '').toString(),
-      );
-    }).toList();
-  } catch (_) {
-    return <Topic>[];
-  }
-}
-
-Future<List<Line>> loadLines(String file) async {
-  final List<Line> out = <Line>[];
-  try {
-    final String raw = await rootBundle.loadString(file);
-    final Map<String, dynamic> map = jsonDecode(raw) as Map<String, dynamic>;
-    for (final dynamic s in (map['sections'] ?? <dynamic>[]) as List) {
-      final Map<String, dynamic> m = s as Map<String, dynamic>;
-      final String heading = (m['heading'] ?? '').toString();
-      if (heading.isNotEmpty) {
-        out.add(Line(true, heading));
-      }
-      for (final dynamic point in (m['points'] ?? <dynamic>[]) as List) {
-        out.add(Line(false, point.toString()));
-      }
+LineResult slideLine(List<int> line) {
+  final List<int> tiles = line.where((int v) => v != 0).toList();
+  final List<int> values = <int>[];
+  final List<bool> merged = <bool>[];
+  int gained = 0;
+  int i = 0;
+  while (i < tiles.length) {
+    if (i + 1 < tiles.length && tiles[i] == tiles[i + 1]) {
+      final int sum = tiles[i] * 2;
+      values.add(sum);
+      merged.add(true);
+      gained += sum;
+      i += 2;
+    } else {
+      values.add(tiles[i]);
+      merged.add(false);
+      i += 1;
     }
-  } catch (_) {
-    return <Line>[];
+  }
+  while (values.length < kSize) {
+    values.add(0);
+    merged.add(false);
+  }
+  return LineResult(values, merged, gained);
+}
+
+List<List<int>> emptyGrid() => List<List<int>>.generate(
+      kSize,
+      (int _) => List<int>.filled(kSize, 0),
+    );
+
+List<List<int>> copyGrid(List<List<int>> g) =>
+    g.map((List<int> row) => List<int>.from(row)).toList();
+
+List<List<int>> coordsFor(Dir d, int i) {
+  final List<List<int>> out = <List<int>>[];
+  for (int k = 0; k < kSize; k++) {
+    if (d == Dir.left) {
+      out.add(<int>[i, k]);
+    } else if (d == Dir.right) {
+      out.add(<int>[i, kSize - 1 - k]);
+    } else if (d == Dir.up) {
+      out.add(<int>[k, i]);
+    } else {
+      out.add(<int>[kSize - 1 - k, i]);
+    }
   }
   return out;
 }
@@ -75,7 +84,39 @@ Color mainColor(BuildContext context) =>
     isDark(context) ? Colors.white : Colors.black;
 
 Color softColor(BuildContext context) =>
-    isDark(context) ? const Color(0xFFD1D5DB) : const Color(0xFF374151);
+    isDark(context) ? const Color(0xFFD1D5DB) : const Color(0xFF4B5563);
+
+Color tileColor(int v) {
+  switch (v) {
+    case 2:
+      return const Color(0xFFEEE4DA);
+    case 4:
+      return const Color(0xFFEDE0C8);
+    case 8:
+      return const Color(0xFFF2B179);
+    case 16:
+      return const Color(0xFFF59563);
+    case 32:
+      return const Color(0xFFF67C5F);
+    case 64:
+      return const Color(0xFFF65E3B);
+    case 128:
+      return const Color(0xFFEDCF72);
+    case 256:
+      return const Color(0xFFEDCC61);
+    case 512:
+      return const Color(0xFFEDC850);
+    case 1024:
+      return const Color(0xFFEDC53F);
+    case 2048:
+      return const Color(0xFFEDC22E);
+    default:
+      return const Color(0xFF3C3A32);
+  }
+}
+
+Color tileTextColor(int v) =>
+    v <= 4 ? const Color(0xFF776E65) : const Color(0xFFF9F6F2);
 
 ThemeData buildTheme(Brightness b) {
   final bool dark = b == Brightness.dark;
@@ -133,168 +174,424 @@ class AnivoreApp extends StatelessWidget {
           child: child ?? const SizedBox.shrink(),
         );
       },
-      home: const HomePage(),
+      home: const GamePage(),
     );
   }
 }
 
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+class GamePage extends StatefulWidget {
+  const GamePage({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<GamePage> createState() => _GamePageState();
 }
 
-class _HomePageState extends State<HomePage> {
-  late final Future<List<Topic>> _future = loadTopics();
+class _GamePageState extends State<GamePage> {
+  final math.Random _rng = math.Random();
+  List<List<int>> _grid = emptyGrid();
+  List<List<int>> _stamp = emptyGrid();
+  List<List<int>>? _prevGrid;
+  List<List<int>>? _prevStamp;
+  int _prevScore = 0;
+  int _score = 0;
+  int _best = 0;
+  int _moveNo = 0;
+  bool _over = false;
+  bool _won = false;
+  bool _continued = false;
+  Offset _drag = Offset.zero;
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: FutureBuilder<List<Topic>>(
-          future: _future,
-          builder: (BuildContext context, AsyncSnapshot<List<Topic>> snap) {
-            if (!snap.hasData) {
-              return const SizedBox.shrink();
-            }
-            final List<Topic> topics = snap.data!;
-            return ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              itemCount: topics.length,
-              separatorBuilder: (BuildContext context, int i) => const Divider(
-                height: 1,
-                thickness: 1,
-                color: Color(0x33808080),
-              ),
-              itemBuilder: (BuildContext context, int i) {
-                final Topic t = topics[i];
-                return GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (BuildContext _) => DetailPage(topic: t),
-                      ),
-                    );
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          t.title,
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            height: 1.4,
-                            color: mainColor(context),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          t.subtitle,
-                          style: TextStyle(
-                            fontSize: 14,
-                            height: 1.4,
-                            color: softColor(context),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            );
-          },
+  void initState() {
+    super.initState();
+    _reset();
+  }
+
+  void _reset() {
+    _grid = emptyGrid();
+    _stamp = emptyGrid();
+    _prevGrid = null;
+    _prevStamp = null;
+    _prevScore = 0;
+    _score = 0;
+    _moveNo = 0;
+    _over = false;
+    _won = false;
+    _continued = false;
+    _spawn();
+    _spawn();
+  }
+
+  void _newGame() {
+    setState(_reset);
+  }
+
+  void _spawn() {
+    final List<int> empty = <int>[];
+    for (int r = 0; r < kSize; r++) {
+      for (int c = 0; c < kSize; c++) {
+        if (_grid[r][c] == 0) {
+          empty.add(r * kSize + c);
+        }
+      }
+    }
+    if (empty.isEmpty) {
+      return;
+    }
+    final int pick = empty[_rng.nextInt(empty.length)];
+    final int r = pick ~/ kSize;
+    final int c = pick % kSize;
+    _grid[r][c] = _rng.nextInt(10) == 0 ? 4 : 2;
+    _stamp[r][c] = _moveNo;
+  }
+
+  bool _hasTile(int v) => _grid.any((List<int> row) => row.contains(v));
+
+  bool _canMove() {
+    for (int r = 0; r < kSize; r++) {
+      for (int c = 0; c < kSize; c++) {
+        if (_grid[r][c] == 0) {
+          return true;
+        }
+        if (c + 1 < kSize && _grid[r][c] == _grid[r][c + 1]) {
+          return true;
+        }
+        if (r + 1 < kSize && _grid[r][c] == _grid[r + 1][c]) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  void _move(Dir d) {
+    if (_over || _won) {
+      return;
+    }
+    final List<List<int>> g = copyGrid(_grid);
+    final List<List<int>> st = copyGrid(_stamp);
+    final int nextMove = _moveNo + 1;
+    int gained = 0;
+    bool changed = false;
+    for (int i = 0; i < kSize; i++) {
+      final List<List<int>> cells = coordsFor(d, i);
+      final List<int> line = <int>[
+        for (final List<int> p in cells) g[p[0]][p[1]],
+      ];
+      final LineResult res = slideLine(line);
+      gained += res.gained;
+      for (int k = 0; k < kSize; k++) {
+        final int r = cells[k][0];
+        final int c = cells[k][1];
+        if (g[r][c] != res.values[k]) {
+          changed = true;
+        }
+        g[r][c] = res.values[k];
+        if (res.merged[k]) {
+          st[r][c] = nextMove;
+        }
+      }
+    }
+    if (!changed) {
+      return;
+    }
+    HapticFeedback.selectionClick();
+    setState(() {
+      _prevGrid = copyGrid(_grid);
+      _prevStamp = copyGrid(_stamp);
+      _prevScore = _score;
+      _grid = g;
+      _stamp = st;
+      _moveNo = nextMove;
+      _score += gained;
+      if (_score > _best) {
+        _best = _score;
+      }
+      _spawn();
+      if (!_continued && _hasTile(2048)) {
+        _won = true;
+      }
+      if (!_canMove()) {
+        _over = true;
+      }
+    });
+  }
+
+  void _undo() {
+    final List<List<int>>? g = _prevGrid;
+    final List<List<int>>? s = _prevStamp;
+    if (g == null || s == null) {
+      return;
+    }
+    setState(() {
+      _grid = copyGrid(g);
+      _stamp = copyGrid(s);
+      _score = _prevScore;
+      _prevGrid = null;
+      _prevStamp = null;
+      _over = false;
+      _won = false;
+    });
+  }
+
+  void _onDragEnd() {
+    final double dx = _drag.dx;
+    final double dy = _drag.dy;
+    if (math.max(dx.abs(), dy.abs()) < 20) {
+      return;
+    }
+    if (dx.abs() > dy.abs()) {
+      _move(dx > 0 ? Dir.right : Dir.left);
+    } else {
+      _move(dy > 0 ? Dir.down : Dir.up);
+    }
+  }
+
+  Widget _button(String label, VoidCallback? onTap, bool dark) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Opacity(
+        opacity: onTap == null ? 0.35 : 1.0,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: dark ? const Color(0xFFEDEDED) : const Color(0xFF111111),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: dark ? Colors.black : Colors.white,
+            ),
+          ),
         ),
       ),
     );
   }
-}
 
-class DetailPage extends StatefulWidget {
-  const DetailPage({super.key, required this.topic});
+  Widget _scoreBox(String label, int value, bool dark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: dark ? const Color(0xFF1F1F1F) : const Color(0xFFEFEFEF),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(
+            label,
+            style: TextStyle(fontSize: 12, color: softColor(context)),
+          ),
+          Text(
+            value.toString(),
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: mainColor(context),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-  final Topic topic;
+  Widget _tile(int r, int c, double cell, bool dark) {
+    final int v = _grid[r][c];
+    final BorderRadius radius = BorderRadius.circular(8);
+    if (v == 0) {
+      return Container(
+        decoration: BoxDecoration(
+          color: dark ? const Color(0xFF2C2C2C) : const Color(0xFFCDC1B4),
+          borderRadius: radius,
+        ),
+      );
+    }
+    final Widget body = Container(
+      decoration: BoxDecoration(color: tileColor(v), borderRadius: radius),
+      alignment: Alignment.center,
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: FittedBox(
+          child: Text(
+            v.toString(),
+            style: TextStyle(
+              fontSize: cell * 0.45,
+              fontWeight: FontWeight.bold,
+              color: tileTextColor(v),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (_stamp[r][c] != _moveNo) {
+      return body;
+    }
+    return TweenAnimationBuilder<double>(
+      key: ValueKey<String>('pop-$r-$c-$_moveNo'),
+      tween: Tween<double>(begin: 0.5, end: 1.0),
+      duration: const Duration(milliseconds: 160),
+      curve: Curves.easeOutBack,
+      builder: (BuildContext context, double scale, Widget? child) {
+        return Transform.scale(scale: scale, child: child);
+      },
+      child: body,
+    );
+  }
 
-  @override
-  State<DetailPage> createState() => _DetailPageState();
-}
-
-class _DetailPageState extends State<DetailPage> {
-  late final Future<List<Line>> _future = loadLines(widget.topic.file);
+  Widget _board(double side, bool dark) {
+    const double gap = 8;
+    final double cell = (side - gap * (kSize + 1)) / kSize;
+    final List<Widget> children = <Widget>[];
+    for (int r = 0; r < kSize; r++) {
+      for (int c = 0; c < kSize; c++) {
+        children.add(
+          Positioned(
+            left: gap + c * (cell + gap),
+            top: gap + r * (cell + gap),
+            width: cell,
+            height: cell,
+            child: _tile(r, c, cell, dark),
+          ),
+        );
+      }
+    }
+    if (_over || _won) {
+      children.add(
+        Positioned.fill(
+          child: Container(
+            decoration: BoxDecoration(
+              color: dark ? const Color(0xCC000000) : const Color(0xCCFFFFFF),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(
+                    _over ? 'खेल खत्म' : 'आप जीत गए!',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: mainColor(context),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _button(
+                    _over ? 'फिर से खेलें' : 'खेलते रहें',
+                    _over
+                        ? _newGame
+                        : () {
+                            setState(() {
+                              _won = false;
+                              _continued = true;
+                            });
+                          },
+                    dark,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    return Container(
+      width: side,
+      height: side,
+      decoration: BoxDecoration(
+        color: dark ? const Color(0xFF1F1F1F) : const Color(0xFFBBADA0),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Stack(children: children),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final bool dark = isDark(context);
     return Scaffold(
-      body: SafeArea(
-        child: FutureBuilder<List<Line>>(
-          future: _future,
-          builder: (BuildContext context, AsyncSnapshot<List<Line>> snap) {
-            final List<Line> lines = snap.data ?? <Line>[];
-            return ListView.builder(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
-              itemCount: lines.length + 1,
-              itemBuilder: (BuildContext context, int i) {
-                if (i == 0) {
-                  return Text(
-                    widget.topic.title,
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      height: 1.3,
-                      color: mainColor(context),
-                    ),
-                  );
-                }
-                final Line l = lines[i - 1];
-                if (l.heading) {
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 22, bottom: 6),
-                    child: Text(
-                      l.text,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        height: 1.4,
-                        color: mainColor(context),
-                      ),
-                    ),
-                  );
-                }
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Row(
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanStart: (DragStartDetails d) {
+          _drag = Offset.zero;
+        },
+        onPanUpdate: (DragUpdateDetails d) {
+          _drag += d.delta;
+        },
+        onPanEnd: (DragEndDetails d) {
+          _onDragEnd();
+        },
+        child: SafeArea(
+          child: LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints c) {
+              final double side = math.max(
+                160.0,
+                math.min(math.min(c.maxWidth - 40, c.maxHeight - 240), 520.0),
+              );
+              return Center(
+                child: SizedBox(
+                  width: side,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
+                      Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: FittedBox(
+                              alignment: Alignment.centerLeft,
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                '2048',
+                                style: TextStyle(
+                                  fontSize: 40,
+                                  fontWeight: FontWeight.bold,
+                                  color: mainColor(context),
+                                ),
+                              ),
+                            ),
+                          ),
+                          _scoreBox('स्कोर', _score, dark),
+                          const SizedBox(width: 8),
+                          _scoreBox('सर्वश्रेष्ठ', _best, dark),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
                       Text(
-                        '•',
+                        'स्वाइप करके टाइल मिलाइए और 2048 बनाइए।',
                         style: TextStyle(
-                          fontSize: 16,
-                          height: 1.5,
-                          color: mainColor(context),
+                          fontSize: 14,
+                          height: 1.4,
+                          color: softColor(context),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          l.text,
-                          style: TextStyle(
-                            fontSize: 16,
-                            height: 1.5,
-                            color: mainColor(context),
+                      const SizedBox(height: 16),
+                      _board(side, dark),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: <Widget>[
+                          Expanded(child: _button('नया खेल', _newGame, dark)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _button(
+                              'पीछे जाएँ',
+                              _prevGrid == null ? null : _undo,
+                              dark,
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                     ],
                   ),
-                );
-              },
-            );
-          },
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
