@@ -186,8 +186,8 @@ class _HomePageState extends State<HomePage> {
                         Text(
                           t.title,
                           style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
                             height: 1.4,
                             color: mainColor(context),
                           ),
@@ -196,7 +196,7 @@ class _HomePageState extends State<HomePage> {
                         Text(
                           t.subtitle,
                           style: TextStyle(
-                            fontSize: 16,
+                            fontSize: 14,
                             height: 1.4,
                             color: softColor(context),
                           ),
@@ -243,8 +243,8 @@ class _DetailPageState extends State<DetailPage> {
                   return Text(
                     widget.topic.title,
                     style: TextStyle(
-                      fontSize: 36,
-                      fontWeight: FontWeight.w800,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
                       height: 1.3,
                       color: mainColor(context),
                     ),
@@ -257,8 +257,8 @@ class _DetailPageState extends State<DetailPage> {
                     child: Text(
                       l.text,
                       style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                         height: 1.4,
                         color: mainColor(context),
                       ),
@@ -273,7 +273,7 @@ class _DetailPageState extends State<DetailPage> {
                       Text(
                         '•',
                         style: TextStyle(
-                          fontSize: 22,
+                          fontSize: 16,
                           height: 1.5,
                           color: mainColor(context),
                         ),
@@ -283,7 +283,7 @@ class _DetailPageState extends State<DetailPage> {
                         child: Text(
                           l.text,
                           style: TextStyle(
-                            fontSize: 22,
+                            fontSize: 16,
                             height: 1.5,
                             color: mainColor(context),
                           ),
