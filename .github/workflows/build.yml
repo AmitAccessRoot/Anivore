@@ -25,53 +25,28 @@ jobs:
           channel: stable
           cache: true
 
-      # Android प्रोजेक्ट बनता है, ऐप का नाम Anivore और पैकेज com.anivore.com सेट होता है।
-      # MainActivity.kt में सिर्फ़ फ़ोन में स्कोर और सेटिंग सहेजने का छोटा कोड है (कोई बाहरी पैकेज नहीं)।
+      # Creates the Android project (package com.anivore.com, app name Anivore).
+      # Your own main.dart and pubspec.yaml are restored after creation.
       - name: Create Android project
         run: |
           cp lib/main.dart /tmp/main.dart
           cp pubspec.yaml /tmp/pubspec.yaml
+          rm lib/main.dart pubspec.yaml
           flutter create . --org com.anivore --project-name com --platforms android
           cp /tmp/main.dart lib/main.dart
           cp /tmp/pubspec.yaml pubspec.yaml
           rm -rf test
           sed -i 's/android:label="[^"]*"/android:label="Anivore"/' android/app/src/main/AndroidManifest.xml
-          find android/app/src/main -name 'MainActivity.*' -delete
-          mkdir -p android/app/src/main/kotlin/com/anivore/com
-          cat > android/app/src/main/kotlin/com/anivore/com/MainActivity.kt << 'KTEOF'
-          package com.anivore.com
-
-          import android.content.Context
-          import io.flutter.embedding.android.FlutterActivity
-          import io.flutter.embedding.engine.FlutterEngine
-          import io.flutter.plugin.common.MethodChannel
-
-          class MainActivity : FlutterActivity() {
-              override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-                  super.configureFlutterEngine(flutterEngine)
-                  val prefs = getSharedPreferences("anivore_store", Context.MODE_PRIVATE)
-                  MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "anivore/store")
-                      .setMethodCallHandler { call, result ->
-                          val key = call.argument<String>("key") ?: ""
-                          when (call.method) {
-                              "get" -> result.success(prefs.getString(key, null))
-                              "set" -> {
-                                  val value = call.argument<String>("value") ?: ""
-                                  prefs.edit().putString(key, value).apply()
-                                  result.success(true)
-                              }
-                              else -> result.notImplemented()
-                          }
-                      }
-              }
-          }
-          KTEOF
 
       - name: Packages
         run: flutter pub get
 
-      # --obfuscate: Dart कोड के नाम बदल देता है, जिससे डिकंपाइल करना बहुत कठिन हो जाता है।
-      # रिलीज़ बिल्ड में R8 (Java/Kotlin कोड का shrink और obfuscate) Flutter डिफ़ॉल्ट रूप से चलाता है।
+      # --obfuscate renames Dart classes, methods and variables so the compiled
+      # code is very hard to read. --split-debug-info stores the symbol files
+      # outside the APK. R8 (Java/Kotlin shrinking and obfuscation) already runs
+      # automatically in Flutter release builds.
+      # Note: these protect the code only. assets/database.db stays a normal
+      # file inside the APK and can be extracted by anyone.
       - name: Build APK
         run: flutter build apk --release --obfuscate --split-debug-info=build/symbols
 
