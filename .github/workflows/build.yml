@@ -1,0 +1,46 @@
+name: Build Anivore APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # Repo me sirf lib/main.dart aur pubspec.yaml ho to Android folder
+      # khud ban jayega, package name com.anivore.com ke saath.
+      - name: Create Android project if missing
+        run: |
+          if [ ! -d android ]; then
+            cp pubspec.yaml /tmp/pubspec.yaml
+            cp lib/main.dart /tmp/main.dart
+            flutter create --org com.anivore --project-name com --platforms=android .
+            cp /tmp/pubspec.yaml pubspec.yaml
+            cp /tmp/main.dart lib/main.dart
+            rm -rf test
+            sed -i 's/android:label="[^"]*"/android:label="Anivore"/' android/app/src/main/AndroidManifest.xml
+          fi
+
+      - run: flutter pub get
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anivore-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
