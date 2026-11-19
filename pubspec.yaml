@@ -1,13 +1,19 @@
-name: two_card_game
-description: Two card game.
+name: anivore
+description: Anivore offline tactical grid command and matrix battle game.
 publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: '>=3.4.0 <4.0.0'
+  flutter: '>=3.22.0'
 
 dependencies:
   flutter:
+    sdk: flutter
+  shared_preferences: ^2.2.3
+
+dev_dependencies:
+  flutter_test:
     sdk: flutter
 
 flutter:
