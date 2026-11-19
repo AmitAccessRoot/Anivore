@@ -1,15 +1,20 @@
-name: Build APK
+name: Build Release APK
 
 on:
   push:
     branches:
       - main
       - master
+  pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,20 +31,33 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Create Android platform files
+      - name: Generate Android project
         run: |
+          mkdir -p /tmp/keep
+          cp pubspec.yaml /tmp/keep/pubspec.yaml
+          cp lib/main.dart /tmp/keep/main.dart
+          flutter create --org com.anivore --project-name anivore --platforms=android .
+          cp /tmp/keep/pubspec.yaml pubspec.yaml
           mkdir -p lib
-          if [ ! -f lib/main.dart ] && [ -f main.dart ]; then mv main.dart lib/main.dart; fi
-          cp lib/main.dart /tmp/main.dart
-          cp pubspec.yaml /tmp/pubspec.yaml
-          if [ ! -d android ]; then
-            flutter create --platforms=android --project-name two_card_game --org com.twocardgame .
-          fi
-          cp /tmp/main.dart lib/main.dart
-          cp /tmp/pubspec.yaml pubspec.yaml
+          cp /tmp/keep/main.dart lib/main.dart
           rm -rf test
+          rm -f analysis_options.yaml
 
-      - name: Get packages
+      - name: Apply package name and label
+        run: |
+          grep -rl "com.anivore.anivore" android | xargs -r sed -i 's/com\.anivore\.anivore/com.anivore.com/g'
+          rm -rf android/app/src/main/kotlin android/app/src/main/java
+          mkdir -p android/app/src/main/kotlin/com/anivore/com
+          cat > android/app/src/main/kotlin/com/anivore/com/MainActivity.kt <<'EOF'
+          package com.anivore.com
+
+          import io.flutter.embedding.android.FlutterActivity
+
+          class MainActivity : FlutterActivity()
+          EOF
+          sed -i 's/android:label="[^"]*"/android:label="Anivore"/' android/app/src/main/AndroidManifest.xml
+
+      - name: Install dependencies
         run: flutter pub get
 
       - name: Build release APK
@@ -48,5 +66,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-release-apk
+          name: anivore-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
