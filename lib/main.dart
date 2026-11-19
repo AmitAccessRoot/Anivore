@@ -1,477 +1,1044 @@
 import 'dart:async';
-import 'dart:math';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-const kBlack = Color(0xFF111111), kGrey = Color(0xFF8A8A8A), kLine = Color(0xFFE2E2E2), kGold = Color(0xFFC9A227);
-const names = ['Rohit Kumar', 'Sonu Kumar', 'Chandan Kumar', 'Rajesh Verma', 'Amit Singh', 'Priya Sharma', 'Vikas Yadav', 'Neha Gupta', 'Arjun Mehta', 'Sanjay Das', 'Pooja Rani', 'Manoj Tiwari', 'Kiran Patel', 'Deepak Joshi'];
-const avatars = [Icons.pets, Icons.face, Icons.rocket_launch, Icons.sports_esports, Icons.bolt, Icons.star, Icons.shield, Icons.local_fire_department];
-const reactions = ['Hurry Up!', 'Well Played!', 'Good Luck!', 'Nice Move!'];
+const List<String> _qrRows = <String>[
+  'fed87bace8bf8',
+  '82ab848897a08',
+  'ba513c6821ae8',
+  'bac76912c12e8',
+  'babd3fe2542e8',
+  '82a82a32da208',
+  'feaaaaaaaabf8',
+  '0028b235a1000',
+  '126f3ff7191d8',
+  'f0c09a3f85000',
+  '47c9a205a9058',
+  'd526f88fdb9d0',
+  'ff0d13355f1c8',
+  '10e59c572cd08',
+  'caab2a5287588',
+  '151e8726bacb8',
+  'aebc0a5b2d798',
+  '914d7cf9a1018',
+  '1370b8932bfe8',
+  '69abde01e9fb0',
+  '9303b00b39450',
+  'a505600118468',
+  '9fce70022cf98',
+  '588b4000e78c8',
+  '4aaea002fead8',
+  '58ebe001298f0',
+  '3fd880041ffb8',
+  'a9d42002e8790',
+  '53c6980deefa8',
+  '91284c3597848',
+  '9b4677d0e1a18',
+  '50e5cbb2113f0',
+  'eba9fa07e0788',
+  '7de332a19d930',
+  '4661c81831fd8',
+  'fc6678e60e1d0',
+  'c3c3b482f8250',
+  '150a104374b78',
+  '469ca26bdeef8',
+  '717f2e1bcc250',
+  'e2a347fecafd0',
+  '00e9b626468d8',
+  'fe727abd6faa8',
+  '823db220688a0',
+  'ba29cbfb7df80',
+  'baaafb9c41090',
+  'ba34f54af99f8',
+  '8208532b5bd40',
+  'fe5876c78d558',
+];
 
-late SharedPreferences P;
-final tick = ValueNotifier<int>(0);
-int gi(String k, [int d = 0]) => P.getInt(k) ?? d;
-bool gb(String k, [bool d = true]) => P.getBool(k) ?? d;
-void si(String k, int v) { P.setInt(k, v); tick.value++; }
-void sb(String k, bool v) { P.setBool(k, v); tick.value++; }
-bool get isPro => gb('pro', false);
-String tier(int t) => t < 100 ? 'Bronze' : t < 300 ? 'Silver' : t < 600 ? 'Gold' : t < 1000 ? 'Platinum' : 'Diamond';
-void hap([bool strong = false]) {
-  if (gb('vib')) { strong ? HapticFeedback.heavyImpact() : HapticFeedback.lightImpact(); }
-  if (gb('snd')) SystemSound.play(SystemSoundType.click);
+List<List<bool>> _parseQr() {
+  final List<List<bool>> out = <List<bool>>[];
+  for (final String row in _qrRows) {
+    final List<bool> bits = <bool>[];
+    for (int c = 0; c < 49; c++) {
+      final int digit = int.parse(row[c ~/ 4], radix: 16);
+      bits.add(((digit >> (3 - (c % 4))) & 1) == 1);
+    }
+    out.add(bits);
+  }
+  return out;
 }
-void go(BuildContext c, Widget w) => Navigator.push(c, MaterialPageRoute(builder: (_) => w));
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  await SystemChrome.setPreferredOrientations(<DeviceOrientation>[
+    DeviceOrientation.portraitUp,
+  ]);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent, systemNavigationBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark, systemNavigationBarIconBrightness: Brightness.dark));
-  P = await SharedPreferences.getInstance();
-  if (!P.containsKey('coins')) { P.setInt('coins', 100); P.setInt('undos', 3); }
-  final day = DateTime.now().difference(DateTime(2020)).inDays, last = gi('last', -1);
-  if (last != day) {
-    P.setInt('streak', last == day - 1 ? gi('streak') + 1 : 1);
-    P.setInt('last', day);
-    P.setInt('coins', gi('coins') + 5);
-  }
-  runApp(const App());
+    statusBarColor: Colors.white,
+    statusBarIconBrightness: Brightness.dark,
+    systemNavigationBarColor: Colors.white,
+    systemNavigationBarIconBrightness: Brightness.dark,
+  ));
+  runApp(const TwoCardGameApp());
 }
 
-class App extends StatelessWidget {
-  const App({super.key});
+class TwoCardGameApp extends StatelessWidget {
+  const TwoCardGameApp({super.key});
+
   @override
-  Widget build(BuildContext context) => MaterialApp(
-        title: 'Anivore',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          useMaterial3: false,
-          scaffoldBackgroundColor: Colors.white,
-          canvasColor: Colors.white,
-          splashFactory: NoSplash.splashFactory,
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
-          hoverColor: Colors.transparent,
-          focusColor: Colors.transparent,
-          colorScheme: const ColorScheme.light(primary: kBlack, secondary: kBlack, surface: Colors.white),
-          textSelectionTheme: const TextSelectionThemeData(cursorColor: kBlack, selectionColor: Colors.black12, selectionHandleColor: kBlack),
-          dialogBackgroundColor: Colors.white,
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'Two Card Game',
+      theme: ThemeData(
+        brightness: Brightness.light,
+        scaffoldBackgroundColor: Colors.white,
+        colorScheme: const ColorScheme.light(primary: Colors.black),
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        hoverColor: Colors.transparent,
+        textSelectionTheme: const TextSelectionThemeData(
+          cursorColor: Colors.black,
+          selectionColor: Color(0xFFDDDDDD),
+          selectionHandleColor: Colors.black,
         ),
-        home: const Shell(),
-      );
-}
-
-class Btn extends StatelessWidget {
-  final String t; final VoidCallback? f; final bool dark; final double h;
-  const Btn(this.t, this.f, {super.key, this.dark = false, this.h = 52});
-  @override
-  Widget build(BuildContext c) => Opacity(
-        opacity: f == null ? .35 : 1,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: f == null ? null : () { hap(); f!(); },
-          child: Container(
-            height: h, alignment: Alignment.center,
-            decoration: BoxDecoration(color: dark ? kBlack : Colors.white, border: Border.all(color: kBlack, width: 1.5), borderRadius: BorderRadius.circular(12)),
-            child: Text(t, style: TextStyle(color: dark ? Colors.white : kBlack, fontWeight: FontWeight.w600, fontSize: 15)),
-          ),
-        ),
-      );
-}
-
-class Pg extends StatelessWidget {
-  final String title; final Widget child;
-  const Pg(this.title, this.child, {super.key});
-  @override
-  Widget build(BuildContext c) => Scaffold(
-        body: SafeArea(
-          child: Column(children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-              child: Row(children: [
-                GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => Navigator.pop(c), child: const Icon(Icons.arrow_back, color: kBlack)),
-                const SizedBox(width: 14),
-                Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: kBlack)),
-              ]),
-            ),
-            Expanded(child: child),
-          ]),
-        ),
-      );
-}
-
-Widget stat(String l, String v) => Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(14), margin: const EdgeInsets.only(right: 8),
-        decoration: BoxDecoration(border: Border.all(color: kLine), borderRadius: BorderRadius.circular(12)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(l, style: const TextStyle(color: kGrey, fontSize: 12)),
-          const SizedBox(height: 4),
-          Text(v, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: kBlack)),
-        ]),
       ),
-    );
-
-class Shell extends StatefulWidget {
-  const Shell({super.key});
-  @override
-  State<Shell> createState() => _ShellS();
-}
-
-class _ShellS extends State<Shell> {
-  int tab = 0;
-  Widget nav(int i, IconData on, IconData off) => Expanded(
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () { hap(); setState(() => tab = i); },
-          child: SizedBox(height: 56, child: Icon(tab == i ? on : off, color: tab == i ? kBlack : kGrey, size: 28)),
-        ),
-      );
-  @override
-  Widget build(BuildContext c) => ValueListenableBuilder<int>(
-        valueListenable: tick,
-        builder: (_, __, ___) => PopScope(
-          canPop: tab == 0,
-          onPopInvokedWithResult: (didPop, _) { if (!didPop) setState(() => tab = 0); },
-          child: Scaffold(
-            body: Column(children: [
-              Expanded(child: SafeArea(bottom: false, child: tab == 0 ? const Home() : const Account())),
-              Container(
-                padding: EdgeInsets.only(bottom: MediaQuery.of(c).padding.bottom),
-                decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: kLine))),
-                child: Row(children: [nav(0, Icons.home, Icons.home_outlined), nav(1, Icons.person, Icons.person_outline)]),
-              ),
-            ]),
-          ),
-        ),
-      );
-}
-
-class Home extends StatelessWidget {
-  const Home({super.key});
-  @override
-  Widget build(BuildContext c) {
-    final t = gi('trophies');
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Anivore', style: TextStyle(fontSize: 40, fontWeight: FontWeight.w800, letterSpacing: -1, color: kBlack)),
-        Text('${tier(t)} tier${isPro ? '  |  PRO' : ''}', style: TextStyle(color: isPro ? kGold : kGrey, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 24),
-        Row(children: [stat('Coins', '${gi('coins')}'), stat('Trophies', '$t')]),
-        const SizedBox(height: 28),
-        Btn('Play vs Computer', () => go(c, const Game(mode: 1, opp: 'Computer')), dark: true),
-        const SizedBox(height: 12),
-        Btn('Find Online Battle', () => go(c, const Match())),
-        const SizedBox(height: 12),
-        Btn('2 Player Local', () => go(c, const Game(mode: 0, opp: 'Player 2'))),
-        const SizedBox(height: 12),
-        Btn('Global Leaderboard', () => go(c, const Board())),
-      ]),
+      home: const GamePage(),
     );
   }
 }
 
-class Match extends StatefulWidget {
-  const Match({super.key});
-  @override
-  State<Match> createState() => _MatchS();
+enum _Screen { home, amount, pick, game, wallet, history, qr, upi, done }
+
+class _Entry {
+  const _Entry(this.title, this.amount, this.note, this.time);
+
+  final String title;
+  final double amount;
+  final String note;
+  final String time;
 }
 
-class _MatchS extends State<Match> {
-  final r = Random();
-  Timer? t; int i = 0; String? pick;
+class _QrPainter extends CustomPainter {
+  const _QrPainter(this.bits, this.cell);
+
+  final List<List<bool>> bits;
+  final double cell;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = Colors.white);
+    final Paint dark = Paint()
+      ..color = const Color(0xFF191919)
+      ..isAntiAlias = false;
+    for (int r = 0; r < bits.length; r++) {
+      final List<bool> row = bits[r];
+      for (int c = 0; c < row.length; c++) {
+        if (row[c]) {
+          canvas.drawRect(
+            Rect.fromLTWH((c + 4) * cell, (r + 4) * cell, cell, cell),
+            dark,
+          );
+        }
+      }
+    }
+    final Offset centre = Offset(28.5 * cell, 28.5 * cell);
+    canvas.drawCircle(centre, 5.6875 * cell, Paint()..color = Colors.white);
+    canvas.drawCircle(centre, 5.1875 * cell, Paint()..color = Colors.black);
+    final TextPainter tp = TextPainter(
+      text: TextSpan(
+        text: 'पे',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: cell * 5.2,
+          fontWeight: FontWeight.w700,
+          height: 1.0,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(
+      canvas,
+      Offset(centre.dx - tp.width / 2, centre.dy - tp.height / 2),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_QrPainter oldDelegate) => oldDelegate.cell != cell;
+}
+
+class _HomeIconPainter extends CustomPainter {
+  const _HomeIconPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double k = size.width / 24;
+    final Path p = Path()
+      ..moveTo(12 * k, 2.5 * k)
+      ..lineTo(1.5 * k, 12 * k)
+      ..lineTo(5 * k, 12 * k)
+      ..lineTo(5 * k, 21 * k)
+      ..lineTo(10 * k, 21 * k)
+      ..lineTo(10 * k, 15 * k)
+      ..lineTo(14 * k, 15 * k)
+      ..lineTo(14 * k, 21 * k)
+      ..lineTo(19 * k, 21 * k)
+      ..lineTo(19 * k, 12 * k)
+      ..lineTo(22.5 * k, 12 * k)
+      ..close();
+    canvas.drawPath(p, Paint()..color = Colors.black);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _WalletIconPainter extends CustomPainter {
+  const _WalletIconPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double k = size.width / 24;
+    final Paint black = Paint()..color = Colors.black;
+    final Paint white = Paint()..color = Colors.white;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(2 * k, 5 * k, 20 * k, 15 * k),
+        Radius.circular(3.5 * k),
+      ),
+      black,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(13 * k, 10 * k, 9 * k, 5.5 * k),
+        Radius.circular(2.5 * k),
+      ),
+      white,
+    );
+    canvas.drawCircle(Offset(16.5 * k, 12.75 * k), 1.1 * k, black);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class GamePage extends StatefulWidget {
+  const GamePage({super.key});
+
+  @override
+  State<GamePage> createState() => _GamePageState();
+}
+
+class _GamePageState extends State<GamePage>
+    with SingleTickerProviderStateMixin {
+  final math.Random _rnd = math.Random();
+  final List<List<bool>> _qr = _parseQr();
+  final TextEditingController _amtC = TextEditingController();
+  final TextEditingController _upiC = TextEditingController();
+  late final Ticker _ticker;
+  Timer? _secTimer;
+  Timer? _pickTimer;
+  Timer? _doneTimer;
+
+  _Screen _screen = _Screen.home;
+  double _s = 1;
+  double _bal = 5;
+  double _bet = 0;
+  int _sel = 0;
+  bool _run = false;
+  bool _locked = false;
+  bool _popup = false;
+  int _sec = 60;
+  double _last = 0;
+  double _pend = 0;
+  bool _nextVisible = false;
+  String _amtErr = '';
+  String _upiErr = '';
+  final List<double> _m = <double>[1, 1];
+  final List<double> _v = <double>[0, 0];
+  final List<double> _tv = <double>[0, 0];
+  final List<double> _nc = <double>[0, 0];
+  final List<double> _vals = <double>[0, 0];
+  final List<_Entry> _hist = <_Entry>[];
+
   @override
   void initState() {
     super.initState();
-    final end = DateTime.now().add(Duration(milliseconds: isPro ? 800 : 5000 + r.nextInt(5001)));
-    t = Timer.periodic(const Duration(milliseconds: 90), (_) {
-      if (!mounted) return;
-      if (DateTime.now().isAfter(end)) {
-        t?.cancel();
-        setState(() => pick = names[r.nextInt(names.length)]);
-        hap(true);
-        Future.delayed(const Duration(milliseconds: 1000), () {
-          if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => Game(mode: 2, opp: pick!)));
-        });
+    _ticker = createTicker(_onTick);
+  }
+
+  @override
+  void dispose() {
+    _secTimer?.cancel();
+    _pickTimer?.cancel();
+    _doneTimer?.cancel();
+    if (_ticker.isActive) {
+      _ticker.stop();
+    }
+    _ticker.dispose();
+    _amtC.dispose();
+    _upiC.dispose();
+    super.dispose();
+  }
+
+  double _r2(double n) => (n * 100).round() / 100;
+
+  String _fmt(double n) {
+    final double r = _r2(n);
+    if (r == r.truncateToDouble()) {
+      return r.toInt().toString();
+    }
+    String t = r.toStringAsFixed(2);
+    if (t.endsWith('0')) {
+      t = t.substring(0, t.length - 1);
+    }
+    return t;
+  }
+
+  double _parse(String t) {
+    final double? x = double.tryParse(t.replaceAll(',', '.'));
+    return x ?? 0;
+  }
+
+  String _two(int n) => n < 10 ? '0$n' : '$n';
+
+  void _log(String title, double amount, String note) {
+    final DateTime d = DateTime.now();
+    _hist.insert(0, _Entry(title, amount, note, '${_two(d.hour)}:${_two(d.minute)}'));
+  }
+
+  void _onTick(Duration elapsed) {
+    final double now = elapsed.inMicroseconds / 1000.0;
+    double dt = (now - _last) / 1000.0;
+    if (dt > 0.05) {
+      dt = 0.05;
+    }
+    if (dt < 0) {
+      dt = 0;
+    }
+    _last = now;
+    for (int i = 0; i < 2; i++) {
+      if (now >= _nc[i]) {
+        _tv[i] = (_rnd.nextDouble() * 2 - 1) * 0.1;
+        _nc[i] = now + 1500 + _rnd.nextDouble() * 3000;
+      }
+      _v[i] += (_tv[i] - _v[i]) * math.min(1.0, dt * 1.5);
+      _m[i] += _v[i] * dt;
+      if (_m[i] < 1) {
+        _m[i] = 1;
+        _v[i] = _v[i].abs();
+        _tv[i] = _tv[i].abs();
+      }
+      if (_m[i] > 2) {
+        _m[i] = 2;
+        _v[i] = -_v[i].abs();
+        _tv[i] = -_tv[i].abs();
+      }
+      _vals[i] = _r2(_bet * _m[i]);
+    }
+    setState(() {});
+  }
+
+  void _go(_Screen screen) {
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _screen = screen;
+    });
+  }
+
+  void _startGame() {
+    _amtC.clear();
+    setState(() {
+      _amtErr = '';
+      _nextVisible = false;
+      _screen = _Screen.amount;
+    });
+  }
+
+  void _onAmount(String t) {
+    final double a = _parse(t);
+    bool ok = a > 0;
+    String err = '';
+    if (ok && _r2(a) > _bal) {
+      err = 'बैलेंस कम है';
+      ok = false;
+    }
+    setState(() {
+      _amtErr = err;
+      _nextVisible = ok;
+    });
+  }
+
+  void _toPick() {
+    final double a = _parse(_amtC.text);
+    if (!(a > 0) || _r2(a) > _bal) {
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _bet = _r2(a);
+      _locked = false;
+      _screen = _Screen.pick;
+    });
+  }
+
+  void _pick(int i) {
+    if (_locked || _run) {
+      return;
+    }
+    setState(() {
+      _locked = true;
+      _sel = i;
+    });
+    _pickTimer?.cancel();
+    _pickTimer = Timer(const Duration(milliseconds: 550), _begin);
+  }
+
+  void _begin() {
+    if (!mounted) {
+      return;
+    }
+    _secTimer?.cancel();
+    if (_ticker.isActive) {
+      _ticker.stop();
+    }
+    setState(() {
+      _bal = _r2(_bal - _bet);
+      _log('Bet', -_bet, '');
+      _run = true;
+      _locked = false;
+      _sec = 60;
+      for (int i = 0; i < 2; i++) {
+        _m[i] = 1;
+        _v[i] = 0;
+        _tv[i] = 0;
+        _nc[i] = 0;
+        _vals[i] = _bet;
+      }
+      _last = 0;
+      _screen = _Screen.game;
+    });
+    _ticker.start();
+    _secTimer = Timer.periodic(const Duration(seconds: 1), (Timer t) {
+      _sec--;
+      if (_sec <= 0) {
+        _finish();
       } else {
-        setState(() => i = r.nextInt(names.length));
+        setState(() {});
       }
     });
   }
-  @override
-  void dispose() { t?.cancel(); super.dispose(); }
-  @override
-  Widget build(BuildContext c) => Pg(
-        'Finding opponent',
-        Center(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text(pick == null ? 'Searching...' : 'Opponent found', style: const TextStyle(color: kGrey)),
-            const SizedBox(height: 24),
-            for (var k = -2; k <= 2; k++)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Text(
-                  k == 0 && pick != null ? pick! : names[(i + k + names.length) % names.length],
-                  style: TextStyle(fontSize: k == 0 ? 28 : 16, fontWeight: k == 0 ? FontWeight.w800 : FontWeight.w400, color: k == 0 ? kBlack : kGrey),
-                ),
-              ),
-          ]),
-        ),
-      );
-}
 
-class Game extends StatefulWidget {
-  final int mode; final String opp; // 0 local, 1 computer, 2 online (simulated)
-  const Game({super.key, required this.mode, required this.opp});
-  @override
-  State<Game> createState() => _GameS();
-}
-
-class _GameS extends State<Game> {
-  static const lines = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
-  final r = Random();
-  List<String> b = List.filled(9, '');
-  List<int> hist = [];
-  String turn = 'X', msg = ''; String? res;
-  double left = 10; bool sudden = false, counted = false;
-  Timer? tm, aiT, msgT;
-  int get mode => widget.mode;
-  double get lim => sudden ? 5 : 10;
-
-  @override
-  void initState() {
-    super.initState();
-    tm = Timer.periodic(const Duration(milliseconds: 100), (_) {
-      if (res != null || !mounted) return;
-      setState(() {
-        left -= .1;
-        if (left <= 0) { turn = turn == 'X' ? 'O' : 'X'; left = lim; _ai(); }
-      });
+  void _finish() {
+    _secTimer?.cancel();
+    if (_ticker.isActive) {
+      _ticker.stop();
+    }
+    setState(() {
+      _run = false;
+      _pend = _vals[_sel];
+      _popup = true;
     });
   }
-  @override
-  void dispose() { tm?.cancel(); aiT?.cancel(); msgT?.cancel(); super.dispose(); }
 
-  String? winner(List<String> x) {
-    for (final l in lines) { if (x[l[0]] != '' && x[l[0]] == x[l[1]] && x[l[1]] == x[l[2]]) return x[l[0]]; }
-    return null;
-  }
-  int pickMove() {
-    final free = [for (var i = 0; i < 9; i++) if (b[i] == '') i];
-    for (final p in ['O', 'X']) {
-      for (final i in free) { final t = [...b]; t[i] = p; if (winner(t) != null) return i; }
-    }
-    if (b[4] == '') return 4;
-    return free[r.nextInt(free.length)];
-  }
-  void _ai() {
-    aiT?.cancel();
-    if (mode == 0 || turn != 'O' || res != null) return;
-    aiT = Timer(Duration(milliseconds: 600 + r.nextInt(900)), () { if (mounted && res == null && turn == 'O') setState(() => move(pickMove())); });
-  }
-  void tap(int i) {
-    if (res != null || b[i] != '' || (mode != 0 && turn != 'X')) return;
-    setState(() => move(i));
-  }
-  void move(int i) {
-    b[i] = turn; hist.add(i); hap();
-    final w = winner(b);
-    if (w != null) { res = w; finish(); }
-    else if (!b.contains('')) { res = 'D'; hap(true); }
-    else { turn = turn == 'X' ? 'O' : 'X'; left = lim; _ai(); }
-  }
-  void finish() {
-    hap(true);
-    if (mode == 0) return;
-    if (!counted) { si('played', gi('played') + 1); counted = true; }
-    if (res == 'X') {
-      si('wins', gi('wins') + 1);
-      si('trophies', gi('trophies') + (isPro ? 20 : 10));
-      si('coins', gi('coins') + 10);
-    } else {
-      si('trophies', max(0, gi('trophies') - 5));
-    }
-  }
-  void undo() {
-    if (hist.isEmpty || res != null) return;
-    if (!isPro) {
-      if (gi('undos') <= 0) { say('No undo left. Buy one for 30 coins.'); return; }
-      si('undos', gi('undos') - 1);
-    }
-    aiT?.cancel();
-    final n = (mode != 0 && turn == 'X' && hist.length >= 2) ? 2 : 1;
-    for (var k = 0; k < n; k++) { b[hist.removeLast()] = ''; }
-    turn = mode == 0 ? (turn == 'X' ? 'O' : 'X') : 'X';
-    left = lim;
-  }
-  void revive() {
-    if (!isPro) {
-      if (gi('coins') < 50) { say('Need 50 coins to revive.'); return; }
-      si('coins', gi('coins') - 50);
-    }
-    for (var k = 0; k < 2 && hist.isNotEmpty; k++) { b[hist.removeLast()] = ''; }
-    res = null; turn = 'X'; left = lim;
-  }
-  void reset({bool sd = false}) {
-    aiT?.cancel();
-    b = List.filled(9, ''); hist = []; res = null; turn = 'X'; sudden = sd; left = lim; counted = false;
-  }
-  void say(String m) {
-    msg = m; msgT?.cancel();
-    msgT = Timer(const Duration(seconds: 2), () { if (mounted) setState(() => msg = ''); });
+  void _collect() {
+    setState(() {
+      _bal = _r2(_bal + _pend);
+      _log('Success', _pend, '');
+      _pend = 0;
+      _popup = false;
+      _screen = _Screen.home;
+    });
   }
 
-  @override
-  Widget build(BuildContext c) {
-    final lost = res == 'O' && mode != 0;
-    final status = res == null
-        ? (mode == 0 ? 'Player $turn turn' : turn == 'X' ? 'Your turn' : '${widget.opp} is thinking')
-        : res == 'D' ? 'Draw' : mode == 0 ? 'Player $res wins' : res == 'X' ? 'You win' : '${widget.opp} wins';
-    return Pg(
-      mode == 0 ? 'Local 2 Player' : 'vs ${widget.opp}',
-      SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-        child: Column(children: [
-          Text(status + (sudden ? '  (Sudden Death)' : ''), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: kBlack)),
-          const SizedBox(height: 12),
-          Container(
-            height: 8, alignment: Alignment.centerLeft,
-            decoration: BoxDecoration(color: kLine, borderRadius: BorderRadius.circular(4)),
-            child: FractionallySizedBox(widthFactor: (left / lim).clamp(0.0, 1.0), child: Container(decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)))),
-          ),
-          const SizedBox(height: 20),
-          AspectRatio(
-            aspectRatio: 1,
-            child: GridView.count(
-              crossAxisCount: 3, physics: const NeverScrollableScrollPhysics(),
-              children: [
-                for (var i = 0; i < 9; i++)
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque, onTap: () => tap(i),
-                    child: Container(
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(border: Border.all(color: kLine, width: 1.5)),
-                      child: Text(b[i], style: TextStyle(fontSize: 56, fontWeight: FontWeight.w300, color: b[i] == 'X' ? kBlack : kGrey)),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          SizedBox(height: 22, child: Text(msg, style: const TextStyle(color: kGrey))),
-          if (res == null) ...[
-            Row(children: [
-              Expanded(child: Btn(isPro ? 'Undo (Unlimited)' : 'Undo (${gi('undos')})', undo, h: 44)),
-              const SizedBox(width: 8),
-              Expanded(child: Btn('Buy Undo (30)', isPro ? null : () {
-                if (gi('coins') < 30) { say('Not enough coins.'); return; }
-                si('coins', gi('coins') - 30); si('undos', gi('undos') + 1);
-              }, h: 44)),
-            ]),
-            const SizedBox(height: 10),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              for (final q in reactions)
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque, onTap: () => setState(() => say(q)),
-                  child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), decoration: BoxDecoration(border: Border.all(color: kLine), borderRadius: BorderRadius.circular(20)), child: Text(q, style: const TextStyle(fontSize: 13, color: kBlack))),
-                ),
-            ]),
-          ] else ...[
-            Btn(lost ? 'Revenge' : 'Play Again', () => setState(reset), dark: true),
-            if (res == 'D') ...[const SizedBox(height: 10), Btn('Sudden Death Round', () => setState(() => reset(sd: true)))],
-            if (lost) ...[const SizedBox(height: 10), Btn(isPro ? 'Instant Revive (Free)' : 'Instant Revive (50 coins)', () => setState(revive))],
-          ],
-        ]),
+  void _openWithdraw() {
+    _upiC.clear();
+    setState(() {
+      _upiErr = '';
+      _screen = _Screen.upi;
+    });
+  }
+
+  void _onUpi(String t) {
+    setState(() {
+      _upiErr = '';
+    });
+  }
+
+  void _withdraw() {
+    final String u = _upiC.text.trim();
+    if (!(_bal > 0)) {
+      setState(() {
+        _upiErr = 'बैलेंस नहीं है';
+      });
+      return;
+    }
+    if (u.isEmpty) {
+      setState(() {
+        _upiErr = 'UPI नंबर डालें';
+      });
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() {
+      final double a = _bal;
+      _bal = 0;
+      _log('Withdraw', -a, u);
+      _screen = _Screen.done;
+    });
+    _doneTimer?.cancel();
+    _doneTimer = Timer(const Duration(milliseconds: 2200), () {
+      if (mounted && _screen == _Screen.done) {
+        setState(() {
+          _screen = _Screen.wallet;
+        });
+      }
+    });
+  }
+
+  TextStyle _ts(
+    double size, {
+    FontWeight weight = FontWeight.w500,
+    Color color = Colors.black,
+  }) {
+    return TextStyle(fontSize: size * _s, fontWeight: weight, color: color);
+  }
+
+  Widget _centered(Widget child) {
+    return Center(child: SingleChildScrollView(child: child));
+  }
+
+  Widget _btn(
+    String label,
+    VoidCallback onTap, {
+    Color bg = Colors.black,
+    Color fg = Colors.white,
+    Color border = Colors.black,
+    double height = 46,
+    IconData? icon,
+  }) {
+    final List<Widget> kids = <Widget>[];
+    if (icon != null) {
+      kids.add(Icon(icon, size: 20 * _s, color: fg));
+      kids.add(SizedBox(width: 8 * _s));
+    }
+    kids.add(Text(label, style: _ts(15, color: fg)));
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        height: height * _s,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(12 * _s),
+          border: Border.all(color: border, width: 1.5 * _s),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: kids),
       ),
     );
   }
-}
 
-class Board extends StatelessWidget {
-  const Board({super.key});
-  @override
-  Widget build(BuildContext c) {
-    final r = Random(7), t = gi('trophies');
-    final sims = [for (var i = 0; i < 25; i++) (names[i % names.length] + (i >= names.length ? ' ${i ~/ names.length + 1}' : ''), 2400 - i * 70 - r.nextInt(30))];
-    final above = sims.where((s) => s.$2 > t).length;
-    final rank = above < sims.length ? above + 1 : max(26, 5000 - t * 5);
-    Widget row(int n, String name, int s, {bool me = false}) => Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          decoration: BoxDecoration(border: const Border(bottom: BorderSide(color: kLine)), color: me ? const Color(0xFFF5F5F5) : Colors.white),
-          child: Row(children: [
-            SizedBox(width: 48, child: Text('#$n', style: const TextStyle(color: kGrey, fontWeight: FontWeight.w600))),
-            Expanded(child: Text(name, style: TextStyle(fontWeight: FontWeight.w600, color: me && isPro ? kGold : kBlack))),
-            if (me && isPro) Container(margin: const EdgeInsets.only(right: 10), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: kGold, borderRadius: BorderRadius.circular(4)), child: const Text('PRO', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800))),
-            Text('$s  ${tier(s)}', style: const TextStyle(color: kGrey, fontSize: 13)),
-          ]),
-        );
-    return Pg('Global Leaderboard', Column(children: [
-      Expanded(child: ListView(children: [for (var i = 0; i < sims.length; i++) row(i + 1, sims[i].$1, sims[i].$2)])),
-      row(rank, 'You', t, me: true),
-      SizedBox(height: MediaQuery.of(c).padding.bottom > 0 ? 0 : 8),
-    ]));
+  Widget _field(
+    TextEditingController c,
+    String hint,
+    double size,
+    ValueChanged<String> onChanged, {
+    bool money = false,
+  }) {
+    final OutlineInputBorder b = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12 * _s),
+      borderSide: BorderSide(color: Colors.black, width: 1.5 * _s),
+    );
+    return SizedBox(
+      height: 46 * _s,
+      child: TextField(
+        controller: c,
+        onChanged: onChanged,
+        expands: true,
+        maxLines: null,
+        minLines: null,
+        textAlign: TextAlign.center,
+        textAlignVertical: TextAlignVertical.center,
+        keyboardType: money
+            ? const TextInputType.numberWithOptions(decimal: true)
+            : TextInputType.text,
+        inputFormatters: money
+            ? <TextInputFormatter>[
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+              ]
+            : <TextInputFormatter>[],
+        cursorColor: Colors.black,
+        style: TextStyle(fontSize: size * _s, color: Colors.black),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: TextStyle(
+            fontSize: size * _s,
+            color: const Color(0xFF999999),
+          ),
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: EdgeInsets.symmetric(horizontal: 14 * _s),
+          border: b,
+          enabledBorder: b,
+          focusedBorder: b,
+        ),
+      ),
+    );
   }
-}
 
-class Account extends StatelessWidget {
-  const Account({super.key});
-  Widget toggle(String l, String k) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Row(children: [
-          Expanded(child: Text(l, style: const TextStyle(fontSize: 16, color: kBlack))),
-          Switch(value: gb(k), onChanged: (v) => sb(k, v), activeColor: kBlack, activeTrackColor: kGrey, inactiveThumbColor: kGrey, inactiveTrackColor: kLine, overlayColor: const WidgetStatePropertyAll(Colors.transparent)),
-        ]),
+  Widget _err(String t) {
+    return SizedBox(
+      height: 16 * _s,
+      child: Center(
+        child: Text(t, style: _ts(13, weight: FontWeight.w400, color: const Color(0xFFA32D2D))),
+      ),
+    );
+  }
+
+  Widget _plainCard(String label) {
+    return Container(
+      width: 96 * _s,
+      height: 150 * _s,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14 * _s),
+        border: Border.all(color: Colors.black, width: 1.5 * _s),
+      ),
+      child: Text(label, style: _ts(15)),
+    );
+  }
+
+  Widget _homeView() {
+    return _centered(
+      SizedBox(
+        width: 212 * _s,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                _plainCard('कार्ड 1'),
+                SizedBox(width: 16 * _s),
+                _plainCard('कार्ड 2'),
+              ],
+            ),
+            SizedBox(height: 28 * _s),
+            _btn('Start Game', _startGame),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _amountView() {
+    final List<Widget> kids = <Widget>[
+      Text('रकम डालें', style: _ts(20)),
+      SizedBox(height: 14 * _s),
+      _field(_amtC, '₹', 18, _onAmount, money: true),
+      SizedBox(height: 6 * _s),
+      _err(_amtErr),
+    ];
+    if (_nextVisible) {
+      kids.add(SizedBox(height: 14 * _s));
+      kids.add(_btn('कार्ड चुनें', _toPick));
+    }
+    return _centered(
+      SizedBox(
+        width: 204 * _s,
+        child: Column(mainAxisSize: MainAxisSize.min, children: kids),
+      ),
+    );
+  }
+
+  Widget _pickCard(int i) {
+    final bool chosen = _locked && _sel == i;
+    final bool faded = _locked && _sel != i;
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 350),
+      opacity: faded ? 0.35 : 1.0,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _pick(i),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.ease,
+          width: (chosen ? 116.0 : 96.0) * _s,
+          height: (chosen ? 176.0 : 150.0) * _s,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14 * _s),
+            border: Border.all(
+              color: Colors.black,
+              width: (chosen ? 3.0 : 1.5) * _s,
+            ),
+          ),
+          child: Text('कार्ड ${i + 1}', style: _ts(15)),
+        ),
+      ),
+    );
+  }
+
+  Widget _pickView() {
+    return _centered(
+      Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          _pickCard(0),
+          SizedBox(width: 12 * _s),
+          _pickCard(1),
+        ],
+      ),
+    );
+  }
+
+  Widget _gameCol(int i) {
+    final bool chosen = _sel == i;
+    final double p = _m[i] - 1;
+    final double top = (8 + 208 * (1 - p)) * _s;
+    return Column(
+      children: <Widget>[
+        Container(
+          width: (chosen ? 108.0 : 92.0) * _s,
+          height: 250 * _s,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14 * _s),
+            border: Border.all(
+              color: chosen ? Colors.black : const Color(0xFFBBBBBB),
+              width: (chosen ? 3.0 : 1.5) * _s,
+            ),
+          ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: <Widget>[
+              Positioned(
+                left: 10 * _s,
+                right: 10 * _s,
+                top: top,
+                height: 34 * _s,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: chosen ? Colors.black : const Color(0xFF555555),
+                    borderRadius: BorderRadius.circular(8 * _s),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: 6 * _s),
+        Text('₹${_vals[i].toStringAsFixed(2)}', style: _ts(20)),
+      ],
+    );
+  }
+
+  Widget _gameView() {
+    return _centered(
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          SizedBox(
+            height: 62 * _s,
+            child: Center(child: Text('$_sec', style: _ts(30))),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              _gameCol(0),
+              SizedBox(width: 12 * _s),
+              _gameCol(1),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _walletView() {
+    return _centered(
+      SizedBox(
+        width: 204 * _s,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text('₹${_fmt(_bal)}', style: _ts(48)),
+            SizedBox(height: 28 * _s),
+            _btn('Deposit', () => _go(_Screen.qr), icon: Icons.add),
+            SizedBox(height: 12 * _s),
+            _btn(
+              'Withdraw',
+              _openWithdraw,
+              bg: Colors.white,
+              fg: Colors.black,
+              icon: Icons.arrow_upward,
+            ),
+            SizedBox(height: 12 * _s),
+            _btn(
+              'History',
+              () => _go(_Screen.history),
+              bg: Colors.white,
+              fg: Colors.black,
+              icon: Icons.history,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _histRow(_Entry e) {
+    final String sign = e.amount >= 0 ? '+' : '\u2212';
+    final String sub = e.note.isEmpty ? e.time : '${e.time} · ${e.note}';
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: 10 * _s),
+      decoration: const BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: Color(0xFFEEEEEE), width: 1),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: <Widget>[
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(e.title, style: _ts(15)),
+                Text(
+                  sub,
+                  style: _ts(12, weight: FontWeight.w400, color: const Color(0xFF777777)),
+                ),
+              ],
+            ),
+          ),
+          Text('${sign}₹${_fmt(e.amount.abs())}', style: _ts(15)),
+        ],
+      ),
+    );
+  }
+
+  Widget _historyView() {
+    final List<Widget> rows = <Widget>[];
+    if (_hist.isEmpty) {
+      rows.add(
+        Padding(
+          padding: EdgeInsets.symmetric(vertical: 12 * _s),
+          child: Text(
+            'कोई हिस्ट्री नहीं',
+            style: _ts(14, weight: FontWeight.w400, color: const Color(0xFF777777)),
+          ),
+        ),
       );
+    }
+    for (final _Entry e in _hist) {
+      rows.add(_histRow(e));
+    }
+    return Padding(
+      padding: EdgeInsets.fromLTRB(18 * _s, 16 * _s, 18 * _s, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text('History', style: _ts(18)),
+          SizedBox(height: 6 * _s),
+          Expanded(
+            child: ListView(padding: EdgeInsets.zero, children: rows),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _qrView() {
+    final double dpr = MediaQuery.of(context).devicePixelRatio;
+    double cellPx = (200 * _s * dpr / 57).floorToDouble();
+    if (cellPx < 1) {
+      cellPx = 1;
+    }
+    final double cell = cellPx / dpr;
+    final double side = cell * 57;
+    return Center(
+      child: SizedBox(
+        width: side,
+        height: side,
+        child: CustomPaint(painter: _QrPainter(_qr, cell)),
+      ),
+    );
+  }
+
+  Widget _upiView() {
+    return _centered(
+      SizedBox(
+        width: 204 * _s,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text('₹${_fmt(_bal)}', style: _ts(40)),
+            SizedBox(height: 16 * _s),
+            _field(_upiC, 'UPI नंबर', 16, _onUpi),
+            SizedBox(height: 10 * _s),
+            _err(_upiErr),
+            SizedBox(height: 10 * _s),
+            _btn('Withdraw', _withdraw),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _doneView() {
+    return _centered(
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Container(
+            width: 72 * _s,
+            height: 72 * _s,
+            decoration: const BoxDecoration(
+              color: Colors.black,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.check, color: Colors.white, size: 44 * _s),
+          ),
+          SizedBox(height: 16 * _s),
+          Text('Success', style: _ts(22)),
+        ],
+      ),
+    );
+  }
+
+  Widget _screenView() {
+    if (_screen == _Screen.home) {
+      return _homeView();
+    }
+    if (_screen == _Screen.amount) {
+      return _amountView();
+    }
+    if (_screen == _Screen.pick) {
+      return _pickView();
+    }
+    if (_screen == _Screen.game) {
+      return _gameView();
+    }
+    if (_screen == _Screen.wallet) {
+      return _walletView();
+    }
+    if (_screen == _Screen.history) {
+      return _historyView();
+    }
+    if (_screen == _Screen.qr) {
+      return _qrView();
+    }
+    if (_screen == _Screen.upi) {
+      return _upiView();
+    }
+    return _doneView();
+  }
+
+  Widget _nav() {
+    return Container(
+      height: 56 * _s,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Color(0xFFE5E5E5), width: 1)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: <Widget>[
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _go(_run ? _Screen.game : _Screen.home),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 24 * _s, vertical: 8 * _s),
+              child: CustomPaint(
+                size: Size(28 * _s, 28 * _s),
+                painter: const _HomeIconPainter(),
+              ),
+            ),
+          ),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _go(_Screen.wallet),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 24 * _s, vertical: 8 * _s),
+              child: CustomPaint(
+                size: Size(28 * _s, 28 * _s),
+                painter: const _WalletIconPainter(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _popupView() {
+    return Positioned.fill(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {},
+        child: Container(
+          color: const Color(0xBFFFFFFF),
+          alignment: Alignment.center,
+          child: Container(
+            width: 176 * _s,
+            padding: EdgeInsets.symmetric(horizontal: 16 * _s, vertical: 24 * _s),
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(20 * _s),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text('₹${_fmt(_pend)}', style: _ts(32, color: Colors.white)),
+                SizedBox(height: 16 * _s),
+                _btn(
+                  'Success',
+                  _collect,
+                  bg: Colors.white,
+                  fg: Colors.black,
+                  border: Colors.white,
+                  height: 44,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext c) {
-    final p = gi('played'), w = gi('wins'), t = gi('trophies'), av = gi('avatar');
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Container(width: 64, height: 64, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: isPro ? kGold : kBlack, width: 2)), child: Icon(avatars[av], size: 32, color: kBlack)),
-          const SizedBox(width: 16),
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Text('You', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: isPro ? kGold : kBlack)),
-              if (isPro) Container(margin: const EdgeInsets.only(left: 8), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: kGold, borderRadius: BorderRadius.circular(4)), child: const Text('PRO', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800))),
-            ]),
-            Text('${tier(t)} tier', style: const TextStyle(color: kGrey)),
-          ]),
-        ]),
-        const SizedBox(height: 20),
-        Wrap(spacing: 14, children: [
-          for (var i = 0; i < avatars.length; i++)
-            GestureDetector(behavior: HitTestBehavior.opaque, onTap: () { hap(); si('avatar', i); },
-                child: Container(margin: const EdgeInsets.only(bottom: 10), width: 44, height: 44, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: av == i ? kBlack : kLine, width: av == i ? 2 : 1)), child: Icon(avatars[i], color: av == i ? kBlack : kGrey))),
-        ]),
-        const SizedBox(height: 10),
-        Row(children: [stat('Matches', '$p'), stat('Wins', '$w')]),
-        const SizedBox(height: 8),
-        Row(children: [stat('Win rate', p == 0 ? '0%' : '${(w * 100 / p).round()}%'), stat('Login streak', '${gi('streak')} d')]),
-        const SizedBox(height: 8),
-        Row(children: [stat('Trophies', '$t'), stat('Coins', '${gi('coins')}')]),
-        const SizedBox(height: 24),
-        toggle('Sound', 'snd'),
-        toggle('Vibration', 'vib'),
-        const SizedBox(height: 20),
-        if (!isPro) ...[
-          Btn('BECOME PRO', () => showDialog(context: c, builder: (d) => AlertDialog(
-                backgroundColor: Colors.white, surfaceTintColor: Colors.transparent,
-                title: const Text('Anivore PRO Lifetime'),
-                content: const Text('One-time purchase, no subscription.\n\nUnlimited undo\nGolden name and PRO badge\n2x trophies on every win\nInstant matchmaking\nFree revive'),
-                actions: [
-                  TextButton(onPressed: () => Navigator.pop(d), style: TextButton.styleFrom(foregroundColor: kBlack, splashFactory: NoSplash.splashFactory), child: const Text('Cancel')),
-                  // TODO: replace with in_app_purchase (non-consumable) before release.
-                  TextButton(onPressed: () { sb('pro', true); Navigator.pop(d); }, style: TextButton.styleFrom(foregroundColor: kBlack, splashFactory: NoSplash.splashFactory), child: const Text('Buy lifetime pass')),
-                ],
-              )), dark: true),
-        ] else
-          const Text('PRO unlocked for life: unlimited undo, 2x trophies, instant matchmaking, golden name.', style: TextStyle(color: kGold, fontWeight: FontWeight.w600)),
-      ]),
+  Widget build(BuildContext context) {
+    final MediaQueryData mq = MediaQuery.of(context);
+    final double w = mq.size.width;
+    final double h = mq.size.height - mq.padding.top - mq.padding.bottom;
+    _s = math.min(w / 252, h / 448);
+    final bool keyboard = mq.viewInsets.bottom > 0;
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            Column(
+              children: <Widget>[
+                Expanded(child: _screenView()),
+                if (!keyboard) _nav(),
+              ],
+            ),
+            if (_popup) _popupView(),
+          ],
+        ),
+      ),
     );
   }
 }
